@@ -9331,9 +9331,10 @@ local char
 plr.CharacterAdded:Connect(function(c)
 	char = c
 end)
-function _R6()
+function _R6(animateScript)
 	function r6()
 	local Figure = char
+	local script = animateScript or Figure:WaitForChild("Animate")
 	local Torso = Figure:WaitForChild("Torso")
 	local RightShoulder = Torso:WaitForChild("Right Shoulder")
 	local LeftShoulder = Torso:WaitForChild("Left Shoulder")
@@ -9345,6 +9346,7 @@ function _R6()
 	local currentAnim = ""
 	local currentAnimInstance = nil
 	local currentAnimTrack = nil
+	local animationLoopActive = true
 	local currentAnimKeyframeHandler = nil
 	local currentAnimSpeed = 1.0
 	local animTable = {}
@@ -9881,11 +9883,19 @@ function _R6()
 	pose = "Standing"
 	
 	spawn(function()
-		while Figure.Parent ~= nil do
+		while Figure.Parent ~= nil and animationLoopActive do
 			local _, time = wait(0.1)
-			move(time)
+			if animationLoopActive then
+				move(time)
+			end
 		end
 	end)
+	local function stopControllerAnimations()
+		animationLoopActive = false
+		onUnhook()
+		stopAllAnimations()
+		stopToolAnimations()
+	end
 	
 	return {
 		onRunning = onRunning, 
@@ -9898,17 +9908,19 @@ function _R6()
 		onSeated = onSeated, 
 		onPlatformStanding = onPlatformStanding,
 		onHook = onHook,
-		onUnhook = onUnhook
+		onUnhook = onUnhook,
+		onStop = stopControllerAnimations
 	}
 	
 	end
 	return r6()
 end
 
-function _R15()
+function _R15(animateScript)
 	local function r15()
 		
 	local Character = char
+	local script = animateScript or Character:WaitForChild("Animate")
 	local Humanoid = Character:WaitForChild("Humanoid")
 	local pose = "Standing"
 	
@@ -9930,6 +9942,7 @@ function _R15()
 	local currentAnim = ""
 	local currentAnimInstance = nil
 	local currentAnimTrack = nil
+	local animationLoopActive = true
 	local currentAnimKeyframeHandler = nil
 	local currentAnimSpeed = 1.0
 	
@@ -10699,11 +10712,19 @@ function _R15()
 	pose = "Standing"
 	-- loop to handle timed state transitions and tool animations
 	spawn(function()
-		while Character.Parent ~= nil do
+		while Character.Parent ~= nil and animationLoopActive do
 			local _, currentGameTime = wait(0.1)
-			stepAnimate(currentGameTime)
+			if animationLoopActive then
+				stepAnimate(currentGameTime)
+			end
 		end
 	end)
+	local function stopControllerAnimations()
+		animationLoopActive = false
+		onUnhook()
+		stopAllAnimations()
+		stopToolAnimations()
+	end
 	return {
 		onRunning = onRunning, 
 		onDied = onDied, 
@@ -10715,7 +10736,8 @@ function _R15()
 		onSeated = onSeated, 
 		onPlatformStanding = onPlatformStanding,
 		onHook = onHook,
-		onUnhook = onUnhook
+		onUnhook = onUnhook,
+		onStop = stopControllerAnimations
 	}
 	end
 	return r15()
@@ -10727,13 +10749,13 @@ while true do
 		break
 	end
 end
-function _Controller()
+function _Controller(animateScript)
 	local humanoid = char:WaitForChild("Humanoid")
 	local animFuncs = {}
 	if (humanoid.RigType == Enum.HumanoidRigType.R6) then
-		animFuncs = _R6()
+		animFuncs = _R6(animateScript)
 	else
-		animFuncs = _R15()
+		animFuncs = _R15(animateScript)
 	end
 	print("Animation succes")
 	return animFuncs
@@ -10745,7 +10767,7 @@ AnimationHandler.__index = AnimationHandler
 function AnimationHandler.new(humanoid, animate)
 	local self = setmetatable({}, AnimationHandler)
 	
-	self._AnimFuncs = _Controller()
+	self._AnimFuncs = _Controller(animate)
 	self.Humanoid = humanoid
 	
 	return self
@@ -10754,6 +10776,14 @@ end
 function AnimationHandler:EnableDefault(bool)
 	if (bool) then
 		self._AnimFuncs.onHook()
+	else
+		self._AnimFuncs.onUnhook()
+	end
+end
+
+function AnimationHandler:Stop()
+	if self._AnimFuncs.onStop then
+		self._AnimFuncs.onStop()
 	else
 		self._AnimFuncs.onUnhook()
 	end
@@ -10841,6 +10871,8 @@ function GravityController.new(player)
 	-- Animation
 	self.AnimationHandler = AnimationHandler.new(self.Humanoid, self.Character:WaitForChild("Animate"))
 	self.AnimationHandler:EnableDefault(false)
+	self.OriginalPlatformStand = self.Humanoid.PlatformStand
+	self.OriginalAutoRotate = self.Humanoid.AutoRotate
 	local ssss = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("SetState") or Instance.new("BindableEvent",game:GetService("Players").LocalPlayer.PlayerScripts)
 	local soundState = ExecutedSounds
 	ssss.Name = "SetState"
@@ -10909,8 +10941,25 @@ function GravityController:Destroy()
 	self.Gyro:Destroy()
 	self.StateTracker:Destroy()
 	
-	self.Humanoid.PlatformStand = false
-	self.AnimationHandler:EnableDefault(true)
+	self.AnimationHandler:Stop()
+	self.Humanoid.PlatformStand = self.OriginalPlatformStand
+	self.Humanoid.AutoRotate = self.OriginalAutoRotate
+
+	-- The controller may have left the root rotated to a wall. Stand upright
+	-- before handing control back to Roblox's normal character controller.
+	local root = self.HRP
+	local forward = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	if forward.Magnitude < 0.001 then
+		forward = Vector3.new(root.CFrame.RightVector.X, 0, root.CFrame.RightVector.Z)
+	end
+	if forward.Magnitude < 0.001 then
+		forward = Vector3.new(0, 0, -1)
+	end
+	root.CFrame = CFrame.lookAt(root.Position, root.Position + forward.Unit, UNIT_Y)
+	root.AssemblyAngularVelocity = ZERO
+	if self.Humanoid.Health > 0 and self.Humanoid:GetState() ~= Enum.HumanoidStateType.Seated then
+		self.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
 	
 	self.GravityUp = UNIT_Y
 end
