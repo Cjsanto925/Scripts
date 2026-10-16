@@ -9273,14 +9273,14 @@ end
 function _InitObjects()
 	-- Build these locally instead of loading an asset with game:GetObjects,
 	-- which is unavailable in normal client and many executor runtimes.
-	local function makeSensor(name, size, shape)
+	local function makeSensor(name, size, shape, canCollide)
 		local part = Instance.new("Part")
 		part.Name = name
 		part.Shape = shape
 		part.Size = size
 		part.Transparency = 1
 		part.Anchored = false
-		part.CanCollide = false
+		part.CanCollide = canCollide
 		part.CanTouch = true
 		part.CanQuery = true
 		part.Massless = true
@@ -9290,9 +9290,11 @@ function _InitObjects()
 	local function initObjects(self)
 		local hrp = self.HRP
 		local humanoid = self.Humanoid
-		local sphere = makeSensor("GravityCollider", Vector3.new(2, 2, 2), Enum.PartType.Ball)
+		-- This welded sphere is the character's physical contact body.
+		local sphere = makeSensor("GravityCollider", Vector3.new(2, 2, 2), Enum.PartType.Ball, true)
 		sphere.Parent = self.Character
-		local floor = makeSensor("GravityFloorSensor", Vector3.new(2.5, 0.2, 2.5), Enum.PartType.Ball)
+		-- The floor probe only reports contact; it should not add another collider.
+		local floor = makeSensor("GravityFloorSensor", Vector3.new(2.5, 0.2, 2.5), Enum.PartType.Ball, false)
 		floor.Parent = self.Character
 		local isR15 = (humanoid.RigType == Enum.HumanoidRigType.R15)
 		local height = isR15 and (humanoid.HipHeight + 0.05) or 2
