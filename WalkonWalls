@@ -1,13 +1,12 @@
 local _p = game:WaitForChild("Players")
 local _plr = _p.ChildAdded:Wait()
 if _plr == _p.LocalPlayer then
-	_plr.ChildAdded:Connect(function(cccc)
+	_plr.ChildAdded:Connect(function(c)
 		if c.Name == "PlayerScriptsLoader" then
 			c.Disabled = true
 		end
 	end)
 end
-]]
 repeat wait()
 a = pcall(function()
 	game:WaitForChild("Players").LocalPlayer:WaitForChild("PlayerScripts").ChildAdded:Connect(function(c)
