@@ -1,27 +1,24 @@
-local _p = game:WaitForChild("Players")
-local _plr = _p.ChildAdded:Wait()
-if _plr == _p.LocalPlayer then
-	_plr.ChildAdded:Connect(function(c)
-		if c.Name == "PlayerScriptsLoader" then
-			c.Disabled = true
-		end
-	end)
+local _p = game:GetService("Players")
+local _plr = _p.LocalPlayer
+while not _plr do
+	_p:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	_plr = _p.LocalPlayer
 end
-repeat wait()
-a = pcall(function()
-	game:WaitForChild("Players").LocalPlayer:WaitForChild("PlayerScripts").ChildAdded:Connect(function(c)
-		if c.Name == "PlayerScriptsLoader"then
-			c.Disabled = true
-		end
-	end)
-	end)
-	if a == true then break end
-until true == false
-game:WaitForChild("Players").LocalPlayer:WaitForChild("PlayerScripts").ChildAdded:Connect(function(c)
-	if c.Name == "PlayerScriptsLoader"then
-		c.Disabled = true
+
+-- The controller below supplies its own controls and camera, so stop Roblox's
+-- default PlayerScripts loader if it is present (now or added shortly later).
+local function disableDefaultPlayerScripts(child)
+	if child.Name == "PlayerScriptsLoader" and child:IsA("LocalScript") then
+		child.Disabled = true
 	end
-end)
+end
+
+local _playerScripts = _plr:WaitForChild("PlayerScripts")
+local _loader = _playerScripts:FindFirstChild("PlayerScriptsLoader")
+if _loader then
+	disableDefaultPlayerScripts(_loader)
+end
+_playerScripts.ChildAdded:Connect(disableDefaultPlayerScripts)
 
 
 function _CameraUI()
@@ -9261,7 +9258,51 @@ function _StateTracker()
 	return StateTracker
 end
 function _InitObjects()
-	local model = workspace:FindFirstChild("objects") or game:GetObjects("rbxassetid://5045408489")[1]
+	local model = workspace:FindFirstChild("objects")
+	if not model then
+		-- GetObjects is unavailable to ordinary LocalScripts. Try the legacy asset,
+		-- then build the small set of required templates locally if it cannot load.
+		local ok, objects = pcall(function()
+			return game:GetObjects("rbxassetid://5045408489")
+		end)
+		model = ok and objects and objects[1]
+	end
+	if not model then
+		model = Instance.new("Folder")
+		model.Name = "objects"
+
+		local sphere = Instance.new("Part")
+		sphere.Name = "Sphere"
+		sphere.Shape = Enum.PartType.Ball
+		sphere.Size = Vector3.new(4, 4, 4)
+		sphere.Transparency = 1
+		sphere.CanCollide = true
+		sphere.CanTouch = true
+		sphere.Massless = true
+		sphere.Parent = model
+
+		local floor = Instance.new("Part")
+		floor.Name = "Floor"
+		floor.Size = Vector3.new(3, 0.2, 3)
+		floor.Transparency = 1
+		floor.CanCollide = false
+		floor.CanTouch = true
+		floor.Massless = true
+		floor.Parent = model
+
+		local vectorForce = Instance.new("VectorForce")
+		vectorForce.Name = "VectorForce"
+		vectorForce.RelativeTo = Enum.ActuatorRelativeTo.World
+		vectorForce.ApplyAtCenterOfMass = true
+		vectorForce.Parent = model
+
+		local bodyGyro = Instance.new("BodyGyro")
+		bodyGyro.Name = "BodyGyro"
+		bodyGyro.MaxTorque = Vector3.new(1e7, 1e7, 1e7)
+		bodyGyro.P = 1e5
+		bodyGyro.D = 1e3
+		bodyGyro.Parent = model
+	end
 	local SPHERE = model:WaitForChild("Sphere")
 	local FLOOR = model:WaitForChild("Floor")
 	local VFORCE = model:WaitForChild("VectorForce")
@@ -9297,7 +9338,7 @@ function _InitObjects()
 end
 local plr = game.Players.LocalPlayer
 local ms = plr:GetMouse()
-local char
+local char = plr.Character or plr.CharacterAdded:Wait()
 plr.CharacterAdded:Connect(function(c)
 	char = c
 end)
@@ -10804,7 +10845,7 @@ function GravityController.new(player)
 	
 	-- Player and character
 	self.Player = player
-	self.Character = player.Character
+	self.Character = player.Character or player.CharacterAdded:Wait()
 	self.Humanoid = player.Character:WaitForChild("Humanoid")
 	self.HRP = player.Character:WaitForChild("HumanoidRootPart")
 	
